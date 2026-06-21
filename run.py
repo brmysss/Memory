@@ -22,4 +22,5 @@ if __name__ == "__main__":
         port=9999,
         reload=False,
         log_config=log_config_path,
+        access_log=False,
     )

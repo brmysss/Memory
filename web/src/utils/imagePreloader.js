@@ -33,7 +33,7 @@ function getDeviceType() {
 
 // 根据网络和设备生成优化的图片URL
 function generateOptimizedUrl(imageUrl, purpose = 'thumbnail') {
-  if (!imageUrl || (!imageUrl.includes('http') && !imageUrl.includes('/api/'))) {
+  if (!imageUrl || (!imageUrl.startsWith('/') && !imageUrl.includes('http') && !imageUrl.includes('/api/'))) {
     return imageUrl
   }
   

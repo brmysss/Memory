@@ -575,7 +575,7 @@ function preloadCategoryImages(category) {
 
 // 生成优化图片URL的函数 - 增强版
 function getOptimizedImageUrl(originalUrl, type = 'lightbox') {
-  if (!originalUrl || (!originalUrl.includes('http') && !originalUrl.includes('/api/'))) {
+  if (!originalUrl || (!originalUrl.startsWith('/') && !originalUrl.includes('http') && !originalUrl.includes('/api/'))) {
     return originalUrl
   }
   
@@ -622,7 +622,7 @@ function getOptimizedImageUrl(originalUrl, type = 'lightbox') {
 // 渐进式图片加载策略
 // 智能渐进式图片加载策略 - 增强版
 async function getProgressiveImageUrls(originalUrl) {
-  if (!originalUrl || (!originalUrl.includes('http') && !originalUrl.includes('/api/'))) {
+  if (!originalUrl || (!originalUrl.startsWith('/') && !originalUrl.includes('http') && !originalUrl.includes('/api/'))) {
     return [originalUrl]
   }
   
@@ -1009,6 +1009,19 @@ async function showImage(blog) {
   preloadAdjacentImages(currentIndex)
 
   show.value = true
+
+  const originalNoQuery = originalImageUrl ? originalImageUrl.replace(/\?.*$/, '') : ''
+  if (originalNoQuery && originalNoQuery !== optimizedImageUrl.replace(/\?.*$/, '')) {
+    setTimeout(() => {
+      preloadImage(originalNoQuery, false)
+        .then((imageData) => {
+          if (!imageData) return
+          if (!currentBlog.value || currentBlog.value.id !== blog.id) return
+          displayImageData(imageData)
+        })
+        .catch(() => {})
+    }, 300)
+  }
 }
 
 // 显示图片数据的统一函数

@@ -87,7 +87,7 @@ docker run -d \
   --name memory \
   --platform linux/amd64 \
   -p 4314:9999 \
-  -v /www/wwwroot/memory.noisework.cn/data:/app/data \
+  -v /memory/data:/app/data \
   --add-host host.docker.internal:host-gateway \
   -e DB_HOST=host.docker.internal \
   -e EXTERNAL_DB_HOST=host.docker.internal \
@@ -102,8 +102,7 @@ docker run -d \
   --name memory \
   --platform linux/amd64 \
   -p 4314:9999 \
-  -e DATABASE_URL="postgresql://username:password@ep-xxx-xxx.us-east-2.aws.neon.tech/dbname?sslmode=require" \
-  -e TZ=Asia/Shanghai \
+  -e DATABASE_URL="postgresql://neondb_owner:npg_xGqJpiNVl09Z@ep-morning-band-a1rmucrj-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
   noise233/memory:latest
 ```
 
@@ -221,13 +220,6 @@ podman manifest create noise233/memory:latest
 podman build --platform linux/amd64 --manifest noise233/memory:latest .
 podman build --platform linux/arm64 --manifest noise233/memory:latest .
 podman manifest push noise233/memory:latest
-```
-
-```
-podman manifest create noise233/memory:dev
-podman build --platform linux/amd64 --manifest noise233/memory:dev .
-podman build --platform linux/arm64 --manifest noise233/memory:dev .
-podman manifest push noise233/memory:dev
 ```
 
 ## Docker下使用

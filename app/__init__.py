@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import Response
+from starlette.responses import Response, FileResponse
 from contextlib import asynccontextmanager
 
 from tortoise import Tortoise
@@ -42,6 +42,134 @@ class CachedStaticFiles(StaticFiles):
         # 为静态资源添加缓存头
         response.headers["Cache-Control"] = "public, max-age=86400"  # 1天缓存
         return response
+
+
+class OptimizedImageStaticFiles(CachedStaticFiles):
+    def __init__(self, *args, cache_dir: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        from pathlib import Path
+
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    async def get_response(self, path: str, scope):
+        from urllib.parse import parse_qs
+
+        query_string = (scope.get("query_string") or b"").decode("utf-8", errors="ignore")
+        if not query_string:
+            return await super().get_response(path, scope)
+
+        qs = parse_qs(query_string)
+        if not qs:
+            return await super().get_response(path, scope)
+
+        try:
+            w = int((qs.get("w") or [0])[0] or 0)
+            h = int((qs.get("h") or [0])[0] or 0)
+            q = int((qs.get("q") or [0])[0] or 0)
+        except Exception:
+            return await super().get_response(path, scope)
+
+        auto = ((qs.get("auto") or [None])[0] or "").lower()
+        fmt = ((qs.get("format") or [None])[0] or "").lower()
+        fit = ((qs.get("fit") or [None])[0] or "").lower()
+
+        wants_resize = (w > 0 or h > 0) and (w <= 5000 and h <= 5000)
+        wants_quality = q > 0
+        wants_format = bool(fmt) or ("format" in auto)
+        if not (wants_resize or wants_quality or wants_format):
+            return await super().get_response(path, scope)
+
+        full_path, stat_result = self.lookup_path(path)
+        if stat_result is None:
+            return Response(status_code=404)
+
+        output_format = fmt
+        if not output_format and "format" in auto:
+            output_format = "webp"
+        if output_format not in {"webp", "jpeg", "jpg", "png"}:
+            output_format = "webp" if ("format" in auto) else ""
+
+        q = max(1, min(q or 75, 95))
+        w = max(1, min(w or 0, 5000)) if w > 0 else 0
+        h = max(1, min(h or 0, 5000)) if h > 0 else 0
+        fit = fit if fit in {"cover", "inside", "contain"} else "inside"
+
+        try:
+            from hashlib import sha1
+
+            mtime = int(stat_result.st_mtime)
+            key = sha1(f"{full_path}:{mtime}:{w}:{h}:{q}:{fit}:{output_format}".encode("utf-8")).hexdigest()
+        except Exception:
+            return await super().get_response(path, scope)
+
+        ext = ""
+        if output_format in {"jpg", "jpeg"}:
+            ext = ".jpg"
+        elif output_format == "png":
+            ext = ".png"
+        elif output_format == "webp":
+            ext = ".webp"
+        cache_path = self.cache_dir / f"{key}{ext}"
+
+        if cache_path.exists():
+            resp = FileResponse(cache_path)
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            return resp
+
+        try:
+            from PIL import Image, ImageOps
+            import os
+            from pathlib import Path
+
+            src_path = Path(full_path)
+            if not src_path.exists() or not src_path.is_file():
+                return Response(status_code=404)
+
+            with Image.open(str(src_path)) as img:
+                img.load()
+
+                if w and h:
+                    if fit == "cover":
+                        img = ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
+                    else:
+                        img = ImageOps.contain(img, (w, h), method=Image.Resampling.LANCZOS)
+                elif w or h:
+                    target_w = w or img.width
+                    target_h = h or img.height
+                    img = ImageOps.contain(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
+
+                save_format = output_format.upper() if output_format else (img.format or "JPEG")
+                if save_format == "JPG":
+                    save_format = "JPEG"
+
+                if save_format == "JPEG" and img.mode in {"RGBA", "LA"}:
+                    bg = Image.new("RGB", img.size, (255, 255, 255))
+                    bg.paste(img, mask=img.split()[-1])
+                    img = bg
+                elif save_format == "JPEG" and img.mode not in {"RGB", "L"}:
+                    img = img.convert("RGB")
+
+                tmp_path = self.cache_dir / f"{key}.tmp"
+                if save_format == "WEBP":
+                    img.save(str(tmp_path), format="WEBP", quality=q, method=6)
+                elif save_format == "PNG":
+                    img.save(str(tmp_path), format="PNG", optimize=True)
+                else:
+                    img.save(str(tmp_path), format="JPEG", quality=q, optimize=True, progressive=True)
+
+                os.replace(str(tmp_path), str(cache_path))
+
+            resp = FileResponse(cache_path)
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            return resp
+        except Exception:
+            try:
+                if cache_path.exists():
+                    cache_path.unlink()
+            except Exception:
+                pass
+            return await super().get_response(path, scope)
 
 
 def register_db(app: FastAPI, db_url=None):
@@ -142,11 +270,13 @@ async def lifespan(app: FastAPI):
     images_dir.mkdir(parents=True, exist_ok=True)
     
     # 挂载图片静态文件服务
+    cache_dir = Path(settings.DATA_DIR) / ".image_cache"
     app.mount(
         f"/{local_path}",
-        CachedStaticFiles(directory=str(images_dir)),
+        OptimizedImageStaticFiles(directory=str(images_dir), cache_dir=str(cache_dir)),
         name="images",
     )
+    app.state.images_mount_path = f"/{local_path}"
 
     logger.info("应用初始化完成")
 
@@ -192,9 +322,22 @@ async def index():
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     # 只对非API路径返回前端页面
-    if request.url.path.startswith("/api/"):
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="API endpoint not found")
+    path = request.url.path
+    if path == "/api" or path.startswith("/api/"):
+        return JSONResponse(
+            content={"code": 404, "msg": "API endpoint not found", "data": None},
+            status_code=404,
+        )
+    if path.startswith("/assets/"):
+        return Response(status_code=404)
+    images_mount_path = getattr(request.app.state, "images_mount_path", None)
+    if images_mount_path and (path == images_mount_path or path.startswith(images_mount_path + "/")):
+        return Response(status_code=404)
+    if "/." in path:
+        return Response(status_code=404)
+    last_segment = path.rsplit("/", 1)[-1]
+    if "." in last_segment:
+        return Response(status_code=404)
     return HTMLResponse(
         content=open(f"./dist/index.html", "r", encoding="utf-8").read(),
         media_type="text/html",

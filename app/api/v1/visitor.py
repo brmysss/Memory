@@ -32,7 +32,7 @@ async def list_blog(
 ):
     got_category_id = -1
     other_category_ids = []
-    logger.info(f"Category: {category}")
+    logger.debug(f"Category: {category}")
     if category:
         got_category = await category_controller.model.filter(alias=category)
         other_category = await category_controller.model.filter(alias__not=category)

@@ -78,7 +78,6 @@ export const useSettingStore = defineStore('setting', {
     async getContentSetting() {
       try {
         const res = await api.getContentSetting()
-        console.log('API getContentSetting 响应:', res)
         if (res.code === 401) {
           this.logout()
           return
@@ -86,7 +85,6 @@ export const useSettingStore = defineStore('setting', {
         // 直接使用整个 res.data 对象，避免遗漏字段
         if (res.data && typeof res.data === 'object') {
           this._contentSetting = { ...res.data }
-          console.log('设置 _contentSetting:', this._contentSetting)
         }
         return res.data
       } catch (error) {
@@ -99,9 +97,7 @@ export const useSettingStore = defineStore('setting', {
     },
     async getStorageSetting() {
       try {
-        console.log('Calling getStorageSetting API...')
         const res = await api.getStorageSetting()
-        console.log('getStorageSetting API response:', res)
         if (res.code === 401) {
           this.logout()
           return
@@ -138,7 +134,6 @@ export const useSettingStore = defineStore('setting', {
           prefix,
           suffix,
         }
-        console.log('Storage setting updated:', this._storageSetting)
         return res.data
       } catch (error) {
         console.error('获取存储设置失败:', error)
@@ -150,9 +145,7 @@ export const useSettingStore = defineStore('setting', {
     },
     async getDatabaseSetting() {
       try {
-        console.log('Calling getDatabaseSetting API...')
         const res = await api.getDatabaseSetting()
-        console.log('getDatabaseSetting API response:', res)
         if (res.code === 401) {
           this.logout()
           return
@@ -181,7 +174,6 @@ export const useSettingStore = defineStore('setting', {
           pool_size: pool_size || 10,
           timeout: timeout || 30,
         }
-        console.log('Database setting updated:', this._databaseSetting)
         return res.data
       } catch (error) {
         console.error('获取数据库设置失败:', error)

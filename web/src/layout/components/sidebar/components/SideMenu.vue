@@ -109,6 +109,27 @@ function handleMenuSelect(key, item) {
 </script>
 
 <style lang="scss">
+.side-menu {
+  :deep(.n-menu-item-content__icon) {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :deep(.n-menu-item-content__icon .n-icon) {
+    width: 18px;
+    height: 18px;
+  }
+
+  :deep(.n-menu-item-content__icon svg) {
+    display: block;
+    width: 1em;
+    height: 1em;
+  }
+}
+
 .side-menu:not(.n-menu--collapsed) {
   .n-menu-item-content {
     &::before {
