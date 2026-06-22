@@ -224,9 +224,9 @@ async def ensure_sqlite_api_token_foreign_key(connection):
         cols_sql = ", ".join([f'"{c}"' for c in copy_cols])
 
         await connection.execute_script("PRAGMA foreign_keys=OFF;")
-        await connection.execute_script("BEGIN;")
         await connection.execute_script(
-            """
+            f"""
+            SAVEPOINT api_token_fk_fix;
             CREATE TABLE IF NOT EXISTS "api_token_new" (
                 "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                 "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -240,26 +240,22 @@ async def ensure_sqlite_api_token_foreign_key(connection):
                 "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
                 "remark" TEXT
             );
-            """
-        )
-        await connection.execute_script(
-            f'INSERT INTO "api_token_new" ({cols_sql}) SELECT {cols_sql} FROM "api_token";'
-        )
-        await connection.execute_script('DROP TABLE "api_token";')
-        await connection.execute_script('ALTER TABLE "api_token_new" RENAME TO "api_token";')
-        await connection.execute_script(
-            """
+            INSERT INTO "api_token_new" ({cols_sql}) SELECT {cols_sql} FROM "api_token";
+            DROP TABLE "api_token";
+            ALTER TABLE "api_token_new" RENAME TO "api_token";
             CREATE INDEX IF NOT EXISTS idx_api_token_token ON api_token (token);
             CREATE INDEX IF NOT EXISTS idx_api_token_user_id ON api_token (user_id);
             CREATE INDEX IF NOT EXISTS idx_api_token_is_active ON api_token (is_active);
             CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
+            RELEASE api_token_fk_fix;
             """
         )
-        await connection.execute_script("COMMIT;")
         await connection.execute_script("PRAGMA foreign_keys=ON;")
+        logger.info('已修复 api_token 外键引用: user_old -> user')
     except Exception as e:
         try:
-            await connection.execute_script("ROLLBACK;")
+            await connection.execute_script("ROLLBACK TO api_token_fk_fix;")
+            await connection.execute_script("RELEASE api_token_fk_fix;")
         except Exception:
             pass
         try:

@@ -1,13 +1,16 @@
 import logging
+import os
 import sys
 
 
 def setup_logger():
     _logger = logging.getLogger("Moment")
-    _logger.setLevel(logging.INFO)
+    level_name = (os.getenv("MOMENT_LOG_LEVEL") or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    _logger.setLevel(level)
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(level)
 
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",

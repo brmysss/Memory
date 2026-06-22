@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tortoise import Tortoise
 from app.models import Setting
-from app.utils import DB_CONNECTION
+from app.utils import DB_CONNECTION, logger
 
 
 async def init_all_default_settings(standalone=True):
@@ -16,7 +16,7 @@ async def init_all_default_settings(standalone=True):
     Args:
         standalone: 是否为独立运行模式，如果为False则不初始化数据库连接
     """
-    print("开始检查和初始化所有设置默认值...")
+    logger.info("开始检查和初始化所有设置默认值...")
 
     try:
         # 只在独立运行时连接到数据库
@@ -27,7 +27,7 @@ async def init_all_default_settings(standalone=True):
         setting = await Setting.get_or_none(id=1)
         
         if not setting:
-            print("设置记录不存在，创建新的设置记录...")
+            logger.info("设置记录不存在，创建新的设置记录...")
             # 创建完整的默认设置
             await Setting.create(
                 general=get_default_general_settings(),
@@ -36,7 +36,7 @@ async def init_all_default_settings(standalone=True):
                 storage=get_default_storage_settings(),
                 database=get_default_database_settings()
             )
-            print("完整设置记录创建完成")
+            logger.info("完整设置记录创建完成")
         else:
             # 更新现有设置，补充缺失字段
             updated = False
@@ -48,7 +48,7 @@ async def init_all_default_settings(standalone=True):
                 if key not in general:
                     general[key] = default_value
                     updated = True
-                    print(f"添加缺失的通用设置字段: {key} = {default_value}")
+                    logger.debug(f"添加缺失的通用设置字段: {key} = {default_value}")
             
             # 更新内容设置
             content = setting.content or {}
@@ -57,7 +57,7 @@ async def init_all_default_settings(standalone=True):
                 if key not in content:
                     content[key] = default_value
                     updated = True
-                    print(f"添加缺失的内容设置字段: {key} = {default_value}")
+                    logger.debug(f"添加缺失的内容设置字段: {key} = {default_value}")
             
             # 更新网站设置
             meta = setting.meta or {}
@@ -66,7 +66,7 @@ async def init_all_default_settings(standalone=True):
                 if key not in meta:
                     meta[key] = default_value
                     updated = True
-                    print(f"添加缺失的网站设置字段: {key} = {default_value}")
+                    logger.debug(f"添加缺失的网站设置字段: {key} = {default_value}")
             
             # 更新存储设置
             storage = setting.storage or {}
@@ -75,7 +75,7 @@ async def init_all_default_settings(standalone=True):
                 if key not in storage:
                     storage[key] = default_value
                     updated = True
-                    print(f"添加缺失的存储设置字段: {key} = {default_value}")
+                    logger.debug(f"添加缺失的存储设置字段: {key} = {default_value}")
             
             # 更新数据库设置
             database = setting.database or {}
@@ -84,7 +84,7 @@ async def init_all_default_settings(standalone=True):
                 if key not in database:
                     database[key] = default_value
                     updated = True
-                    print(f"添加缺失的数据库设置字段: {key} = {default_value}")
+                    logger.debug(f"添加缺失的数据库设置字段: {key} = {default_value}")
             
             # 如果有更新，保存到数据库
             if updated:
@@ -94,16 +94,14 @@ async def init_all_default_settings(standalone=True):
                 setting.storage = storage
                 setting.database = database
                 await setting.save()
-                print("设置更新完成")
+                logger.info("设置更新完成")
             else:
-                print("所有设置已完整，无需更新")
+                logger.info("所有设置已完整，无需更新")
 
-        print("所有设置默认值检查和初始化完成")
+        logger.info("所有设置默认值检查和初始化完成")
 
     except Exception as e:
-        print(f"初始化过程中发生错误: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"初始化过程中发生错误: {str(e)}")
         raise e
     finally:
         # 只在独立运行时关闭数据库连接
