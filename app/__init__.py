@@ -28,6 +28,7 @@ from app.utils.config import settings
 from app.api import api_router
 from app.controllers.user import UserCreate, user_controller
 from app.controllers.setting import SettingCreate, setting_controller
+from app.controllers.api_token import api_token_controller
 
 
 class CachedStaticFiles(StaticFiles):
@@ -54,6 +55,7 @@ class OptimizedImageStaticFiles(CachedStaticFiles):
 
     async def get_response(self, path: str, scope):
         from urllib.parse import parse_qs
+        from starlette.concurrency import run_in_threadpool
 
         query_string = (scope.get("query_string") or b"").decode("utf-8", errors="ignore")
         if not query_string:
@@ -118,7 +120,6 @@ class OptimizedImageStaticFiles(CachedStaticFiles):
             return resp
 
         try:
-            from PIL import Image, ImageOps
             import os
             from pathlib import Path
 
@@ -126,39 +127,45 @@ class OptimizedImageStaticFiles(CachedStaticFiles):
             if not src_path.exists() or not src_path.is_file():
                 return Response(status_code=404)
 
-            with Image.open(str(src_path)) as img:
-                img.load()
+            tmp_path = self.cache_dir / f"{key}.tmp"
 
-                if w and h:
-                    if fit == "cover":
-                        img = ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
+            def process_image():
+                from PIL import Image, ImageOps
+
+                with Image.open(str(src_path)) as img:
+                    img.load()
+
+                    if w and h:
+                        if fit == "cover":
+                            img = ImageOps.fit(img, (w, h), method=Image.Resampling.LANCZOS)
+                        else:
+                            img = ImageOps.contain(img, (w, h), method=Image.Resampling.LANCZOS)
+                    elif w or h:
+                        target_w = w or img.width
+                        target_h = h or img.height
+                        img = ImageOps.contain(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
+
+                    save_format = output_format.upper() if output_format else (img.format or "JPEG")
+                    if save_format == "JPG":
+                        save_format = "JPEG"
+
+                    if save_format == "JPEG" and img.mode in {"RGBA", "LA"}:
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1])
+                        img = bg
+                    elif save_format == "JPEG" and img.mode not in {"RGB", "L"}:
+                        img = img.convert("RGB")
+
+                    if save_format == "WEBP":
+                        img.save(str(tmp_path), format="WEBP", quality=q, method=6)
+                    elif save_format == "PNG":
+                        img.save(str(tmp_path), format="PNG", optimize=True)
                     else:
-                        img = ImageOps.contain(img, (w, h), method=Image.Resampling.LANCZOS)
-                elif w or h:
-                    target_w = w or img.width
-                    target_h = h or img.height
-                    img = ImageOps.contain(img, (target_w, target_h), method=Image.Resampling.LANCZOS)
-
-                save_format = output_format.upper() if output_format else (img.format or "JPEG")
-                if save_format == "JPG":
-                    save_format = "JPEG"
-
-                if save_format == "JPEG" and img.mode in {"RGBA", "LA"}:
-                    bg = Image.new("RGB", img.size, (255, 255, 255))
-                    bg.paste(img, mask=img.split()[-1])
-                    img = bg
-                elif save_format == "JPEG" and img.mode not in {"RGB", "L"}:
-                    img = img.convert("RGB")
-
-                tmp_path = self.cache_dir / f"{key}.tmp"
-                if save_format == "WEBP":
-                    img.save(str(tmp_path), format="WEBP", quality=q, method=6)
-                elif save_format == "PNG":
-                    img.save(str(tmp_path), format="PNG", optimize=True)
-                else:
-                    img.save(str(tmp_path), format="JPEG", quality=q, optimize=True, progressive=True)
+                        img.save(str(tmp_path), format="JPEG", quality=q, optimize=True, progressive=True)
 
                 os.replace(str(tmp_path), str(cache_path))
+
+            await run_in_threadpool(process_image)
 
             resp = FileResponse(cache_path)
             resp.headers["Cache-Control"] = "public, max-age=86400"
@@ -205,6 +212,15 @@ async def init_superuser():
         )
 
 
+async def ensure_default_api_tokens():
+    users = await user_controller.model.all()
+    for user in users:
+        try:
+            await api_token_controller.create_default_token(user.id)
+        except Exception as e:
+            logger.error(f"默认Token初始化失败: {str(e)}")
+
+
 async def init_setting():
     """初始化设置，确保所有字段都有默认值"""
     from migrations.init_default_settings import init_all_default_settings
@@ -240,6 +256,7 @@ async def lifespan(app: FastAPI):
     try:
         await init_superuser()
         await init_setting()
+        await ensure_default_api_tokens()
         logger.info("用户和设置初始化完成")
     except Exception as e:
         logger.error(f"用户和设置初始化失败: {str(e)}")

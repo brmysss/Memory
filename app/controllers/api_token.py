@@ -114,6 +114,9 @@ class ApiTokenController(CRUDBase[ApiToken, ApiTokenCreate, ApiTokenUpdate]):
         ).first()
         
         if existing_default:
+            if not existing_default.is_active:
+                existing_default.is_active = True
+                await existing_default.save()
             return existing_default
 
         # 创建默认token

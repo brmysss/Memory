@@ -21,3 +21,11 @@ def setup_logger():
 
 
 logger = setup_logger()
+
+
+class SuppressInvalidHTTPRequestFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            return "Invalid HTTP request received" not in record.getMessage()
+        except Exception:
+            return True

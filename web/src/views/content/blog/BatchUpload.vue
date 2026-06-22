@@ -662,31 +662,27 @@ onMounted(() => {
       class="mb-4"
     >
       <NUploadDragger>
-        <div style="margin-bottom: 12px">
-          <TheIcon icon="material-symbols:cloud-upload" :size="48" color="#409eff" />
-        </div>
-        <div class="text-4xl font-medium mb-4">点击或拖拽文件到此区域上传</div>
-        <div class="text-2xl text-gray-500">
-          支持单个或批量上传，支持 JPG、PNG、GIF、WebP 等格式
-          <br>
-          当前存储方式：{{ isLocalStorage ? '本地存储' : '云端存储' }}
-        </div>
-        
-        <!-- 上传提示信息 -->
-        <div class="mt-4 space-y-2">
-          <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
-            <div class="text-lg text-green-700 dark:text-green-300">
-              💡 所有图片将使用上方设置的压缩选项进行处理
-            </div>
+        <div class="upload-dragger-content">
+          <div class="upload-dragger-icon">
+            <TheIcon icon="material-symbols:cloud-upload" :size="64" color="#409eff" />
           </div>
-          <div v-if="compressionOptions.output_format === 'webp'" class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
-            <div class="text-lg text-yellow-700 dark:text-yellow-300">
-              ⚠️ WebP格式不支持EXIF信息读取，如需保留拍摄参数请选择"保持原格式"
-            </div>
-          </div>
+          <div class="upload-dragger-title">点击或拖拽文件到此处上传</div>
+          <div class="upload-dragger-desc">支持批量上传，支持 JPG、PNG、GIF、WebP 等格式</div>
         </div>
       </NUploadDragger>
     </NUpload>
+
+    <div v-if="enableStorage" class="upload-hints mb-4">
+      <div class="upload-hint upload-hint-neutral">
+        当前存储方式：{{ isLocalStorage ? '本地存储' : '云端存储' }}
+      </div>
+      <div class="upload-hint upload-hint-success">
+        所有图片将使用上方设置的压缩选项进行处理
+      </div>
+      <div v-if="compressionOptions.output_format === 'webp'" class="upload-hint upload-hint-warning">
+        WebP格式不支持EXIF信息读取，如需保留拍摄参数请选择“保持原格式”
+      </div>
+    </div>
     
     <div v-else class="text-center p-4 bg-gray-800 text-gray-200 rounded mb-4">
       <TheIcon icon="material-symbols:warning" :size="24" color="#f56c6c" class="mb-2" />
@@ -963,13 +959,75 @@ onMounted(() => {
 .n-upload-dragger {
   border: 2px dashed #d9d9d9;
   border-radius: 8px;
-  padding: 20px 15px;
+  padding: 28px 16px;
   text-align: center;
   transition: border-color 0.3s ease;
 }
 
 .n-upload-dragger:hover {
   border-color: #409eff;
+}
+
+.upload-dragger-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.upload-dragger-icon {
+  line-height: 0;
+}
+
+.upload-dragger-title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.upload-dragger-desc {
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.5;
+}
+
+.upload-dragger-sub {
+  font-size: 13px;
+  color: #909399;
+  line-height: 1.5;
+}
+
+.upload-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-hint {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.upload-hint-success {
+  background: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  color: #67c23a;
+}
+
+.upload-hint-neutral {
+  background: #f4f4f5;
+  border: 1px solid #e9e9eb;
+  color: #606266;
+}
+
+.upload-hint-warning {
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  color: #e6a23c;
 }
 
 .image-grid {

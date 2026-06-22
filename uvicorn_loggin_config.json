@@ -1,6 +1,11 @@
 {
     "version": 1,
     "disable_existing_loggers": false,
+    "filters": {
+      "suppress_invalid_http": {
+        "()": "app.utils.logger.SuppressInvalidHTTPRequestFilter"
+      }
+    },
     "formatters": {
       "default": {
         "()": "uvicorn.logging.DefaultFormatter",
@@ -16,7 +21,10 @@
       "default": {
         "formatter": "default",
         "class": "logging.StreamHandler",
-        "stream": "ext://sys.stderr"
+        "stream": "ext://sys.stderr",
+        "filters": [
+          "suppress_invalid_http"
+        ]
       },
       "access": {
         "formatter": "access",

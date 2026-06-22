@@ -2,10 +2,6 @@
   <article class="thumb img-area" ref="thumbRef" @click="handleClick">
     <a class="thumb-a my-photo">
       <div class="image-container" :class="{ 'collection-stack': isCollection }">
-        <!-- 简洁的加载提示 -->
-        <div v-if="imageSrc && !imageLoaded" class="loading-indicator">
-          <div class="loading-spinner"></div>
-        </div>
         <!-- 渐进式图片加载 -->
         <img
           v-if="imageSrc"
@@ -150,9 +146,10 @@ const onImageError = () => {
       }
     }, 300) // 减少延迟
   } else {
-    imageLoaded.value = false
+    imageLoaded.value = true
     imageSrc.value = ''
     retryCount.value = 0
+    emit('image-loaded')
   }
 }
 

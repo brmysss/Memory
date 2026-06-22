@@ -115,9 +115,75 @@ async def init_db():
             )
 
         await execute_migrations()
+        await ensure_sqlite_api_token_schema(connection)
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
         raise
+
+
+async def ensure_sqlite_api_token_schema(connection):
+    try:
+        is_sqlite = 'aiosqlite' in str(type(connection)).lower()
+        if not is_sqlite:
+            return
+
+        result = await connection.execute_query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='api_token'"
+        )
+        if not result[1]:
+            await connection.execute_script(
+                """
+                CREATE TABLE IF NOT EXISTS "api_token" (
+                    "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    "name" VARCHAR(100) NOT NULL,
+                    "token" VARCHAR(255) NOT NULL UNIQUE,
+                    "is_permanent" INT NOT NULL DEFAULT 0,
+                    "expires_at" TIMESTAMP,
+                    "is_active" INT NOT NULL DEFAULT 1,
+                    "last_used" TIMESTAMP,
+                    "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+                    "remark" TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_api_token_token ON api_token (token);
+                CREATE INDEX IF NOT EXISTS idx_api_token_user_id ON api_token (user_id);
+                CREATE INDEX IF NOT EXISTS idx_api_token_is_active ON api_token (is_active);
+                CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
+                """
+            )
+            return
+
+        table_info = await connection.execute_query('PRAGMA table_info("api_token")')
+        existing_cols = {row[1] for row in (table_info[1] or [])}
+
+        columns_to_add = [
+            ('remark', 'TEXT'),
+            ('last_used', 'TIMESTAMP'),
+            ('expires_at', 'TIMESTAMP'),
+            ('is_active', 'INT NOT NULL DEFAULT 1'),
+            ('is_permanent', 'INT NOT NULL DEFAULT 0'),
+            ('name', 'VARCHAR(100) NOT NULL DEFAULT ""'),
+            ('token', 'VARCHAR(255) NOT NULL DEFAULT ""'),
+            ('created_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+            ('updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+            ('user_id', 'INT NOT NULL DEFAULT 1'),
+        ]
+
+        for col_name, col_def in columns_to_add:
+            if col_name not in existing_cols:
+                await connection.execute_script(f'ALTER TABLE "api_token" ADD COLUMN "{col_name}" {col_def};')
+
+        await connection.execute_script(
+            """
+            CREATE INDEX IF NOT EXISTS idx_api_token_token ON api_token (token);
+            CREATE INDEX IF NOT EXISTS idx_api_token_user_id ON api_token (user_id);
+            CREATE INDEX IF NOT EXISTS idx_api_token_is_active ON api_token (is_active);
+            CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
+            """
+        )
+    except Exception as e:
+        logger.error(f"API Token表结构检查失败: {str(e)}")
 
 
 async def execute_migrations():

@@ -1,13 +1,5 @@
 <template>
   <div id="blog-main" ref="listRef" :class="{ loading: isLoading }">
-    <!-- 普通加载状态 -->
-    <div v-if="isLoading && !isFirstLoad" class="gallery-loading-message">
-      <div class="loading-content">
-        <div class="loading-spinner-main"></div>
-        <div class="loading-text">内容请稍后</div>
-      </div>
-    </div>
-    
     <!-- 首次加载弹窗状态 -->
     <div v-if="isLoading && isFirstLoad" class="loading-modal-overlay">
       <div class="loading-modal">
@@ -37,7 +29,7 @@
       </transition-group>
       
       <!-- 图片展示区域加载遮罩 -->
-      <div v-if="isLoading || isImagesLoading" class="gallery-loading-overlay">
+      <div v-if="(isLoading || isImagesLoading) && !isFirstLoad" class="gallery-loading-overlay">
         <div class="gallery-loading-content">
           <div class="gallery-loading-spinner"></div>
           <div class="gallery-loading-text">
@@ -79,15 +71,6 @@
             <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-      </div>
-    </div>
-    
-    <!-- 已加载完成提示 -->
-    <!-- 底部加载状态 -->
-    <div v-if="isLoading && blogs.length > 0" class="bottom-loading-indicator">
-      <div class="bottom-loading-content">
-        <div class="loading-spinner-small"></div>
-        <span class="loading-text">正在加载第 {{ page }} 页...</span>
       </div>
     </div>
     
