@@ -115,15 +115,20 @@ async def init_db():
             )
 
         await execute_migrations()
-        await ensure_sqlite_api_token_schema(connection)
+        await ensure_sqlite_api_token_schema(connection, db_connection["db_url"])
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
         raise
 
 
-async def ensure_sqlite_api_token_schema(connection):
+async def ensure_sqlite_api_token_schema(connection, db_url: str | None = None):
     try:
-        is_sqlite = 'aiosqlite' in str(type(connection)).lower()
+        is_sqlite = False
+        if db_url and db_url.startswith("sqlite"):
+            is_sqlite = True
+        else:
+            module_name = getattr(connection.__class__, "__module__", "") or ""
+            is_sqlite = module_name.startswith("tortoise.backends.sqlite") or "sqlite" in module_name.lower() or "sqlite" in str(type(connection)).lower()
         if not is_sqlite:
             return
 
@@ -152,6 +157,7 @@ async def ensure_sqlite_api_token_schema(connection):
                 CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
                 """
             )
+            await ensure_sqlite_api_token_foreign_key(connection)
             return
 
         table_info = await connection.execute_query('PRAGMA table_info("api_token")')
