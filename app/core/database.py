@@ -182,8 +182,85 @@ async def ensure_sqlite_api_token_schema(connection):
             CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
             """
         )
+        await ensure_sqlite_api_token_foreign_key(connection)
     except Exception as e:
         logger.error(f"API Token表结构检查失败: {str(e)}")
+
+
+async def ensure_sqlite_api_token_foreign_key(connection):
+    try:
+        fk_info = await connection.execute_query('PRAGMA foreign_key_list("api_token")')
+        fk_rows = fk_info[1] or []
+        referenced_tables = {row[2] for row in fk_rows if len(row) > 2}
+        if "user_old" not in referenced_tables:
+            return
+
+        table_info = await connection.execute_query('PRAGMA table_info("api_token")')
+        old_cols = [row[1] for row in (table_info[1] or [])]
+
+        new_cols = [
+            "id",
+            "created_at",
+            "updated_at",
+            "name",
+            "token",
+            "is_permanent",
+            "expires_at",
+            "is_active",
+            "last_used",
+            "user_id",
+            "remark",
+        ]
+        copy_cols = [c for c in new_cols if c in old_cols]
+        if not copy_cols:
+            return
+
+        cols_sql = ", ".join([f'"{c}"' for c in copy_cols])
+
+        await connection.execute_script("PRAGMA foreign_keys=OFF;")
+        await connection.execute_script("BEGIN;")
+        await connection.execute_script(
+            """
+            CREATE TABLE IF NOT EXISTS "api_token_new" (
+                "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "name" VARCHAR(100) NOT NULL,
+                "token" VARCHAR(255) NOT NULL UNIQUE,
+                "is_permanent" INT NOT NULL DEFAULT 0,
+                "expires_at" TIMESTAMP,
+                "is_active" INT NOT NULL DEFAULT 1,
+                "last_used" TIMESTAMP,
+                "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+                "remark" TEXT
+            );
+            """
+        )
+        await connection.execute_script(
+            f'INSERT INTO "api_token_new" ({cols_sql}) SELECT {cols_sql} FROM "api_token";'
+        )
+        await connection.execute_script('DROP TABLE "api_token";')
+        await connection.execute_script('ALTER TABLE "api_token_new" RENAME TO "api_token";')
+        await connection.execute_script(
+            """
+            CREATE INDEX IF NOT EXISTS idx_api_token_token ON api_token (token);
+            CREATE INDEX IF NOT EXISTS idx_api_token_user_id ON api_token (user_id);
+            CREATE INDEX IF NOT EXISTS idx_api_token_is_active ON api_token (is_active);
+            CREATE INDEX IF NOT EXISTS idx_api_token_expires_at ON api_token (expires_at);
+            """
+        )
+        await connection.execute_script("COMMIT;")
+        await connection.execute_script("PRAGMA foreign_keys=ON;")
+    except Exception as e:
+        try:
+            await connection.execute_script("ROLLBACK;")
+        except Exception:
+            pass
+        try:
+            await connection.execute_script("PRAGMA foreign_keys=ON;")
+        except Exception:
+            pass
+        logger.error(f"API Token外键修复失败: {str(e)}")
 
 
 async def execute_migrations():
